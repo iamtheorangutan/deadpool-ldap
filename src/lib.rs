@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use ldap3::{Ldap, LdapConnAsync, LdapConnSettings, LdapError};
 
 pub struct Manager(String, LdapConnSettings);
@@ -20,7 +19,6 @@ impl Manager {
     }
 }
 
-#[async_trait]
 impl deadpool::managed::Manager for Manager {
     type Type = Ldap;
     type Error = LdapError;
@@ -37,7 +35,11 @@ impl deadpool::managed::Manager for Manager {
         });
         Ok(ldap)
     }
-    async fn recycle(&self, conn: &mut Self::Type) -> deadpool::managed::RecycleResult<Self::Error> {
+    async fn recycle(
+        &self,
+        conn: &mut Self::Type,
+        _: &deadpool::managed::Metrics,
+    ) -> deadpool::managed::RecycleResult<Self::Error> {
         // Revert back to anonymous bind by binding with zero credentials
         conn.simple_bind("", "").await?;
         Ok(())
@@ -46,8 +48,8 @@ impl deadpool::managed::Manager for Manager {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn manager_new_sets_url() {
@@ -73,23 +75,20 @@ mod tests {
 
     #[test]
     fn manager_with_connection_settings_returns_manager() {
-        let manager = Manager::new("my_url")
-            .with_connection_settings(
-                LdapConnSettings::new()
-                    .set_conn_timeout(Duration::from_secs(30))
-            );
+        let manager = Manager::new("my_url").with_connection_settings(
+            LdapConnSettings::new().set_conn_timeout(Duration::from_secs(30)),
+        );
         assert!(is_manager(&manager));
     }
 
     #[cfg(any(feature = "tls-native", feature = "tls-rustls"))]
     #[test]
     fn manager_with_connection_settings_updates_settings() {
-        let manager = Manager::new("my_url")
-            .with_connection_settings(
-                LdapConnSettings::new()
-                    .set_conn_timeout(Duration::from_secs(30))
-                    .set_starttls(true)
-            );
+        let manager = Manager::new("my_url").with_connection_settings(
+            LdapConnSettings::new()
+                .set_conn_timeout(Duration::from_secs(30))
+                .set_starttls(true),
+        );
         let default = LdapConnSettings::new();
 
         assert_ne!(manager.1.starttls(), default.starttls());
